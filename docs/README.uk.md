@@ -200,4 +200,4 @@ src/                       Production-пакет
 
 ## Ліцензія
 
-[MIT](../LICENSE) © 2026 Кирило Біцький.
+[MIT](../LICENSE) © 2026 1minEpowMinX.
