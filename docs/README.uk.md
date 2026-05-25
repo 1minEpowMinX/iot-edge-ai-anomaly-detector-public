@@ -22,8 +22,8 @@
 ## Встановлення
 
 ```bash
-git clone https://github.com/<your-github-username>/iot-edge-ai-anomaly-detector
-cd iot-edge-ai-anomaly-detector
+git clone https://github.com/1minEpowMinX/iot-edge-ai-anomaly-detector-public
+cd iot-edge-ai-anomaly-detector-public
 pip install -r requirements.txt
 ```
 
