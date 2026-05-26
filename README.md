@@ -75,7 +75,7 @@ flowchart TB
     M["psutil metrics<br>(12 channels)"] --> S["MinMax scaler"]
     S --> W["Sliding window<br>(W = 40)"]
     W --> P{"EMA<br>prefilter"}
-    P -- confidently NORMAL<br>(~35 % of windows) --> FAST["Fast path"]
+    P -- confidently NORMAL<br>(~25-30 % of windows) --> FAST["Fast path"]
     P -- uncertain /<br>suspicious --> G["GRU forward<br>(1,516 params)"]
     G --> R["forecast − actual"]
     R --> SC["anomaly score<br>s_t = MAE per window"]
