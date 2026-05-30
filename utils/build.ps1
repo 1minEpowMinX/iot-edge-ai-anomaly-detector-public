@@ -1,4 +1,5 @@
-pyinstaller --noconfirm --clean --onedir --name iot-edge-ai-anomaly-detector `
+pyinstaller --noconfirm --clean --onedir --name iot-edge-ai-anomaly-detector-win64 `
+--version-file ".\resources\version_info.txt" `
 --collect-all torch `
 --collect-submodules sklearn `
 --exclude-module tkinter `
