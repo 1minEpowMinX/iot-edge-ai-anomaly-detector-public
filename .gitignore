@@ -12,3 +12,6 @@ artifacts/
 
 # Real-data collections (user-specific)
 *.csv
+
+# Virtual environments
+.venv*
