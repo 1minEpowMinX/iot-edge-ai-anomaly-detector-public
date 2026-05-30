@@ -12,32 +12,66 @@
 
 ## Чому
 
-- **Маленька.** 1 516 навчальних параметрів; bundle моделі важить <30 КБ.
+- **Маленька.** 1 516 навчальних параметрів; навчений пакет моделі важить <30 КБ.
 - **Швидка.** 0.31 мс на одне вікно на CPU; GPU не потрібен.
 - **Точна.** F1 = 0.945 / Precision = 0.918 / Recall = 0.973 / ROC-AUC = 0.995.
 - **Чесна.** Holdout повністю ізольований від циклу пошуку — виміряний bias 0.016 F1.
 - **Самодостатня.** Генератор синтетичних даних, еволюційний пошук, калібровка, дашборди — все в одному пакеті.
-- **Production-style CLI.** 9 субкоманд, `rich`-форматування виводу, повне збереження/завантаження bundle.
+- **Production-style CLI.** 9 субкоманд, `rich`-форматування виводу, повне збереження/завантаження пакета моделі.
 
-## Встановлення
+## Завантаження
+
+Готові самодостатні збірки публікуються на сторінці [Releases](https://github.com/1minEpowMinX/iot-edge-ai-anomaly-detector-public/releases) — **встановлення Python не потрібне**. Для кожної платформи окремий архів за схемою `iot-edge-ai-anomaly-detector-{платформа}.7z`:
+
+| Платформа | Файл |
+|---|---|
+| Windows x64 | `iot-edge-ai-anomaly-detector-win64.7z` |
+| Linux x64 | `iot-edge-ai-anomaly-detector-linux64.7z` |
+| macOS | `iot-edge-ai-anomaly-detector-macos.7z` |
+
+Кожен архів містить виконуваний файл та теку `_internal/` з усіма залежностями (PyInstaller onedir). **Тримайте виконуваний файл і теку `_internal/` разом в одній директорії.**
+
+Перевірка завантаження за `SHA256SUMS.txt`, доданим до релізу:
+
+```bash
+# Linux / macOS
+sha256sum iot-edge-ai-anomaly-detector-linux64.7z
+# Windows PowerShell
+(Get-FileHash .\iot-edge-ai-anomaly-detector-win64.7z -Algorithm SHA256).Hash
+```
+
+## Швидкий старт (готова збірка)
+
+Розпакуйте архів, відкрийте термінал у теці з розпакованою програмою та виконайте:
+
+```bash
+# Windows
+iot-edge-ai-anomaly-detector.exe demo
+iot-edge-ai-anomaly-detector.exe demo --quick     # ~5 с прискорений варіант
+iot-edge-ai-anomaly-detector.exe --help
+
+# Linux / macOS — ті самі команди, без .exe та з префіксом ./
+./iot-edge-ai-anomaly-detector demo
+```
+
+> У прикладах нижче використано ім'я виконуваного файлу для Windows. У Linux/macOS команди ідентичні — приберіть `.exe` та додайте префікс `./`.
+
+Усі артефакти (дашборди, пакет моделі, метаінформація) пишуться в `artifacts/`.
+
+## Запуск з вихідного коду (альтернатива)
+
+Якщо ви бажаєте запускати з вихідного коду або працюєте на платформі, для якої немає збірки:
 
 ```bash
 git clone https://github.com/1minEpowMinX/iot-edge-ai-anomaly-detector-public
 cd iot-edge-ai-anomaly-detector-public
 pip install -r requirements.txt
+python main.py demo
 ```
 
 Вимоги: Python 3.10+, PyTorch 2.0+, scikit-learn, NumPy, pandas, matplotlib, psutil, rich.
 
-## Швидкий старт
-
-```bash
-python -m src demo            # 30-секундна демонстрація — тренує переможця еволюції, F1 = 0.945
-python -m src demo --quick    # ~5 с прискорений варіант
-python -m src --help          # перелік усіх команд
-```
-
-Усі артефакти (дашборди, bundle моделі, метаінформація) пишуться в `artifacts/`.
+> При запуску з вихідного коду замінюйте `iot-edge-ai-anomaly-detector.exe` у будь-якій команді нижче на `python main.py`.
 
 ## CLI
 
@@ -50,7 +84,7 @@ python -m src --help          # перелік усіх команд
 | `collect` | Збирає реальні метрики хоста у CSV. |
 | `search`  | Трифазний еволюційний пошук (GA → shortlist → holdout retrain). |
 | `compare` | Порівняння GRU vs LSTM vs MovingAverage на однакових даних. |
-| `ablate`  | Аблація: 5-метричний підмножина (мінімальна за ТЗ) vs повний 12-метричний набір. |
+| `ablate`  | Аблація: 5-метрична підмножина (мінімальна за ТЗ) vs повний 12-метричний набір. |
 | `sweep`   | Розгортка `window_size` та/або `hidden_size`. |
 
 Глобальні прапорці: `--version`, `-v/--verbose`, `-q/--quiet`.
@@ -58,30 +92,30 @@ python -m src --help          # перелік усіх команд
 ## Приклади
 
 ```bash
-python -m src demo
-python -m src train --epochs 100 --lr 1e-3 --hidden 16 --window 40
-python -m src compare                            # GRU vs LSTM vs MA
-python -m src ablate                             # 5 vs 12 ознак
-python -m src sweep --axis window_size           # варіація довжини вікна
-python -m src search --quick                     # швидкий еволюційний пошук
-python -m src collect --duration 60 -o my.csv    # збір реальних метрик
-python -m src infer --model artifacts/ --data my.csv
+iot-edge-ai-anomaly-detector.exe demo
+iot-edge-ai-anomaly-detector.exe train --epochs 100 --lr 1e-3 --hidden 16 --window 40
+iot-edge-ai-anomaly-detector.exe compare              # GRU vs LSTM vs MA
+iot-edge-ai-anomaly-detector.exe ablate               # 5 vs 12 ознак
+iot-edge-ai-anomaly-detector.exe sweep --axis window_size
+iot-edge-ai-anomaly-detector.exe search --quick       # швидкий еволюційний пошук
+iot-edge-ai-anomaly-detector.exe collect --duration 60 -o my.csv
+iot-edge-ai-anomaly-detector.exe infer --model artifacts/ --data my.csv
 ```
 
 ## Як це працює
 
 ```mermaid
 flowchart TB
-    M["psutil metrics<br>(12 channels)"] --> S["MinMax scaler"]
+    M["метрики хоста<br>(12 каналів)"] --> S["MinMax скейлер"]
     S --> W["Sliding window<br>(W = 40)"]
-    W --> P{"EMA<br>prefilter"}
-    P -- confidently NORMAL<br>(~25-30 % of windows) --> FAST["Fast path"]
-    P -- uncertain /<br>suspicious --> G["GRU forward<br>(1,516 params)"]
-    G --> R["forecast − actual"]
-    R --> SC["anomaly score<br>s_t = MAE per window"]
+    W --> P{"EMA<br>передфільтр"}
+    P -- явно НОРМАЛЬНІ<br>(~25-30 % вікон) --> FAST["Швидкий шлях"]
+    P -- невизначені /<br>підозрілі --> G["GRU forward<br>(1 516 параметрів)"]
+    G --> R["прогноз − реальність"]
+    R --> SC["оцінка аномальності<br>s_t = MAE по вікну"]
     SC --> T{"s_t &gt; τ ?"}
-    T -- no --> N(["NORMAL"])
-    T -- yes --> A(["ANOMALY"])
+    T -- ні --> N(["НОРМА"])
+    T -- так --> A(["АНОМАЛІЯ"])
     FAST --> N
      P:::decision
      FAST:::fast
@@ -100,15 +134,15 @@ flowchart TB
 
 GRU тренується прогнозувати наступний крок. Аномалії проявляються як значні відхилення прогнозу від реального значення (MAE-based score). Легковаговий EMA-передфільтр відсіює явно нормальні вікна, щоб зекономити обчислення — до GRU доходять тільки `UNCERTAIN`/`ANOMALY` кандидати. Поріг прийняття рішення τ автоматично калібрується на окремому калібрувальному наборі для максимізації F1 (метод Auto-F1).
 
-## Розгортання на реальному IoT-пристрої
+## Розгортання на реальному пристрої
 
-Модель у комплекті навчена на синтетичних даних, тому на реальному обладнанні **будуть** false positives через distribution shift. Для production-використання:
+Модель у комплекті навчена на **синтетичних даних**, тому на реальному обладнанні можливі хибні спрацювання через зсув розподілу (distribution shift). Для робочого використання:
 
-1. Зібрати метрики цільового пристрою: `python -m src collect --duration 3600 -o real.csv`
-2. Перенавчити на цих даних: `python -m src train --epochs 200`
-3. Розгорнути отриманий bundle `artifacts/model.pt` + `scaler_*.npy` + `meta.json`.
+1. Зібрати метрики цільового пристрою: `iot-edge-ai-anomaly-detector.exe collect --duration 3600 -o real.csv`
+2. Перенавчити на цих даних: `iot-edge-ai-anomaly-detector.exe train --epochs 200`
+3. Використати отриманий пакет з `artifacts/` (`model.pt` + `scaler_*.npy` + `meta.json`).
 
-Bundle портативний — завантажується через `src.artifacts.load_bundle()` на цільовому пристрої.
+Пакет портативний — завантажується через `src.artifacts.load_bundle()` на цільовому пристрої.
 
 ## Результати
 
@@ -122,11 +156,11 @@ Bundle портативний — завантажується через `src.a
 | ROC-AUC             | 0.995           |
 | Параметри           | 1 516           |
 | Час інференції      | 0.31 мс / вікно |
-| Розмір bundle       | ~28 КБ          |
+| Розмір пакета моделі | ~28 КБ         |
 
 **Геном переможця:** `window_size=40, hidden_size=8, num_layers=3, dropout=0.4, lr=3e-3`.
 
-### Порівняння моделей (`python -m src compare`)
+### Порівняння моделей (`compare`)
 
 | Модель         | Precision | Recall  | F1        | Параметри | Інференс  |
 |----------------|----------:|--------:|----------:|----------:|----------:|
@@ -150,8 +184,8 @@ Bundle портативний — завантажується через `src.a
 | **MAE** (anomaly score) | Лінійний відгук підсилює контраст між нормальним шумом та аномальними сплесками — на відміну від Huber, який його гасить. |
 | **AdamW + ReduceLROnPlateau** | Decoupled weight decay + адаптивний learning rate. |
 | **Early stopping із patience-reset при lr-drop** | Не вбиває моделі, які ще можуть навчатися на нижчому lr. |
-| **Асиметричний EMA-передфільтр** | По швидкому шляху йдуть тільки явно нормальні вікна; підозрілі завжди доходять до GRU. Зберігає recall, економить ~35 % forward-проходів. |
-| **Auto-F1 калібровка порогу** | Поріг підбирається на окремому labelled-наборі, а не ставиться довільно на 95-й перцентиль. |
+| **Асиметричний EMA-передфільтр** | По швидкому шляху йдуть тільки явно нормальні вікна; підозрілі завжди доходять до GRU. Зберігає recall, економить ~25–30 % forward-проходів. |
+| **Auto-F1 калібрування порога** | Поріг підбирається на окремому labelled-наборі, а не ставиться довільно на 95-й перцентиль. |
 | **No-leak протокол** | Holdout test (seed=999) ніколи не використовується під час пошуку. Dev-test (seed=123) — тільки для fitness. |
 | **12 метрик** замість 5 | Канали диску / swap / процесів критичні для I/O штормів, витоків пам'яті, fork-bomb; аблація підтверджує приріст +0.20 F1. |
 | **Еволюційний пошук** | Знаходить менші й кращі архітектури, ніж ручний тюнінг (1.5K параметрів vs 12K, +0.04 F1). |
@@ -159,9 +193,9 @@ Bundle портативний — завантажується через `src.a
 ## Структура проєкту
 
 ```
+main.py                    CLI entrypoint (python main.py)
 src/                       Production-пакет
 ├── __init__.py            Публічний API + __version__
-├── __main__.py            CLI entrypoint (python -m src)
 ├── cli.py                 argparse + 9 субкоманд
 ├── _ui.py                 rich UI з plain-text fallback
 ├── config.py              AppConfig + усі sub-config'и
@@ -174,7 +208,7 @@ src/                       Production-пакет
 ├── pipeline.py            Pipeline + RunResult
 ├── reporter.py            Reporter (консоль + дашборди)
 ├── visualize.py           matplotlib плотери
-├── artifacts.py           Збереження / завантаження bundle моделі
+├── artifacts.py           Збереження / завантаження пакета моделі
 └── experiments/           Лабораторні + production раннери
     ├── evolution.py       Genome / SearchSpace / GA / shortlist / retrain
     ├── search.py          Трифазна оркестрація
@@ -196,7 +230,7 @@ src/                       Production-пакет
 - Наскрізному **no-leak дослідницькому протоколі**, що відокремлює підбір гіперпараметрів від фінальної оцінки.
 - Демонстрації того, що **еволюційний пошук знаходить компактні, придатні для edge архітектури**, які перевершують ручний тюнінг.
 
-Якщо щось із цього корисне у вашій роботі — форкайте, цитуйте або відкривайте issue.
+Якщо щось із цього корисне у твоїй роботі — форкай, цитуй або відкривай issue.
 
 ## Ліцензія
 

@@ -12,32 +12,66 @@ The architecture was discovered by a three-phase evolutionary search with a stri
 
 ## Why
 
-- **Tiny.** 1,516 trainable parameters; the model bundle is <30 KB.
+- **Tiny.** 1,516 trainable parameters; the trained model bundle is <30 KB.
 - **Fast.** 0.31 ms per window on CPU; no GPU needed.
 - **Accurate.** F1 = 0.945 / Precision = 0.918 / Recall = 0.973 / ROC-AUC = 0.995.
 - **Honest.** Holdout is sealed off from the search loop — bias measured at 0.016 F1.
 - **Self-contained.** Synthetic data generator, evolutionary search, calibration, dashboards — all in one package.
 - **Production-style CLI.** 9 subcommands, `rich`-formatted output, full model bundle save/load.
 
-## Installation
+## Download
+
+Pre-built, self-contained bundles are published on the [Releases](https://github.com/1minEpowMinX/iot-edge-ai-anomaly-detector-public/releases) page — **no Python installation required**. One archive per platform, named `iot-edge-ai-anomaly-detector-{platform}.7z`:
+
+| Platform | Asset |
+|---|---|
+| Windows x64 | `iot-edge-ai-anomaly-detector-win64.7z` |
+| Linux x64 | `iot-edge-ai-anomaly-detector-linux64.7z` |
+| macOS | `iot-edge-ai-anomaly-detector-macos.7z` |
+
+Each archive contains the executable plus an `_internal/` folder with all dependencies bundled (PyInstaller onedir). **Keep the executable and `_internal/` together in the same folder.**
+
+Verify the download against `SHA256SUMS.txt` attached to the release:
+
+```bash
+# Linux / macOS
+sha256sum iot-edge-ai-anomaly-detector-linux64.7z
+# Windows PowerShell
+(Get-FileHash .\iot-edge-ai-anomaly-detector-win64.7z -Algorithm SHA256).Hash
+```
+
+## Quick start (pre-built binary)
+
+Extract the archive, open a terminal in the extracted folder, and run:
+
+```bash
+# Windows
+iot-edge-ai-anomaly-detector.exe demo
+iot-edge-ai-anomaly-detector.exe demo --quick     # ~5s reduced-budget run
+iot-edge-ai-anomaly-detector.exe --help
+
+# Linux / macOS — same commands, drop the .exe and prefix with ./
+./iot-edge-ai-anomaly-detector demo
+```
+
+> In the examples below the Windows executable name is used. On Linux/macOS the commands are identical — drop the `.exe` and prefix with `./`.
+
+All artifacts (dashboards, model bundle, metadata) are written to `artifacts/`.
+
+## Run from source (alternative)
+
+If you prefer running from source, or are on an unlisted platform:
 
 ```bash
 git clone https://github.com/1minEpowMinX/iot-edge-ai-anomaly-detector-public
 cd iot-edge-ai-anomaly-detector-public
 pip install -r requirements.txt
+python main.py demo
 ```
 
 Requirements: Python 3.10+, PyTorch 2.0+, scikit-learn, NumPy, pandas, matplotlib, psutil, rich.
 
-## Quick start
-
-```bash
-python -m src demo            # 30s showcase — trains the evolved winner, F1 = 0.945
-python -m src demo --quick    # ~5s reduced-budget run
-python -m src --help          # all commands
-```
-
-All artifacts (dashboards, model bundle, metadata) are written to `artifacts/`.
+> From source, replace `iot-edge-ai-anomaly-detector.exe` in any command below with `python main.py`.
 
 ## CLI
 
@@ -58,21 +92,21 @@ Global flags: `--version`, `-v/--verbose`, `-q/--quiet`.
 ## Examples
 
 ```bash
-python -m src demo
-python -m src train --epochs 100 --lr 1e-3 --hidden 16 --window 40
-python -m src compare                            # GRU vs LSTM vs MA
-python -m src ablate                             # 5 vs 12 metrics
-python -m src sweep --axis window_size           # vary input window length
-python -m src search --quick                     # fast evolutionary search
-python -m src collect --duration 60 -o my.csv    # collect real host metrics
-python -m src infer --model artifacts/ --data my.csv
+iot-edge-ai-anomaly-detector.exe demo
+iot-edge-ai-anomaly-detector.exe train --epochs 100 --lr 1e-3 --hidden 16 --window 40
+iot-edge-ai-anomaly-detector.exe compare              # GRU vs LSTM vs MA
+iot-edge-ai-anomaly-detector.exe ablate               # 5 vs 12 metrics
+iot-edge-ai-anomaly-detector.exe sweep --axis window_size
+iot-edge-ai-anomaly-detector.exe search --quick       # fast evolutionary search
+iot-edge-ai-anomaly-detector.exe collect --duration 60 -o my.csv
+iot-edge-ai-anomaly-detector.exe infer --model artifacts/ --data my.csv
 ```
 
 ## How it works
 
 ```mermaid
 flowchart TB
-    M["psutil metrics<br>(12 channels)"] --> S["MinMax scaler"]
+    M["host metrics<br>(12 channels)"] --> S["MinMax scaler"]
     S --> W["Sliding window<br>(W = 40)"]
     W --> P{"EMA<br>prefilter"}
     P -- confidently NORMAL<br>(~25-30 % of windows) --> FAST["Fast path"]
@@ -100,13 +134,13 @@ flowchart TB
 
 The GRU is trained to forecast the next time step. Anomalies appear as large residuals between forecast and observation (MAE-based score). A lightweight EMA prefilter routes obvious-normal windows past the GRU to save compute — only `UNCERTAIN`/`ANOMALY` candidates ever reach the model. The decision threshold τ is auto-calibrated on a separate calibration set to maximize F1 (Auto-F1).
 
-## Deploying to a real IoT device
+## Deploying to a real device
 
-The shipped model is trained on synthetic data, so it **will** produce false positives on real hardware due to distribution shift. For production use:
+The shipped model is trained on **synthetic data**, so it will produce false positives on real hardware due to distribution shift. For production use:
 
-1. Collect target-device metrics: `python -m src collect --duration 3600 -o real.csv`
-2. Retrain on this data: `python -m src train --epochs 200`
-3. Ship the resulting `artifacts/model.pt` + `scaler_*.npy` + `meta.json` bundle.
+1. Collect target-device metrics: `iot-edge-ai-anomaly-detector.exe collect --duration 3600 -o real.csv`
+2. Retrain on this data: `iot-edge-ai-anomaly-detector.exe train --epochs 200`
+3. Reuse the resulting bundle in `artifacts/` (`model.pt` + `scaler_*.npy` + `meta.json`).
 
 The bundle is portable — load it with `src.artifacts.load_bundle()` on the target device.
 
@@ -122,11 +156,11 @@ The bundle is portable — load it with `src.artifacts.load_bundle()` on the tar
 | ROC-AUC            | 0.995          |
 | Parameters         | 1,516          |
 | Inference latency  | 0.31 ms/window |
-| Bundle size        | ~28 KB         |
+| Model bundle size  | ~28 KB         |
 
 **Winner genome:** `window_size=40, hidden_size=8, num_layers=3, dropout=0.4, lr=3e-3`.
 
-### Model comparison (`python -m src compare`)
+### Model comparison (`compare`)
 
 | Model          | Precision | Recall  | F1        | Params | Inference |
 |----------------|----------:|--------:|----------:|-------:|----------:|
@@ -150,7 +184,7 @@ The bundle is portable — load it with `src.artifacts.load_bundle()` on the tar
 | **MAE** (anomaly score) | Linear response amplifies the contrast between normal noise and anomalous spikes — opposite of what Huber does. |
 | **AdamW + ReduceLROnPlateau** | Decoupled weight decay + adaptive learning rate. |
 | **Early stopping with patience-reset on lr-drop** | Avoids killing models that can still improve at a lower lr. |
-| **Asymmetric EMA prefilter** | Fast-paths only confidently-normal windows; suspicious ones always reach the GRU. Preserves recall while saving ~35 % of forward passes. |
+| **Asymmetric EMA prefilter** | Fast-paths only confidently-normal windows; suspicious ones always reach the GRU. Preserves recall while saving ~25–30 % of forward passes. |
 | **Auto-F1 threshold calibration** | Threshold chosen on a labelled calibration set, not arbitrarily at the 95th percentile. |
 | **No-leak protocol** | Holdout test (seed=999) is never used during search. Dev-test (seed=123) is for fitness only. |
 | **12 metrics** instead of 5 | Disk/swap/process channels are essential for I/O storms, memory leaks, fork bombs; ablation confirms +0.20 F1. |
@@ -159,9 +193,9 @@ The bundle is portable — load it with `src.artifacts.load_bundle()` on the tar
 ## Project layout
 
 ```
+main.py                    CLI entrypoint (python main.py)
 src/                       Production package
 ├── __init__.py            Public API + __version__
-├── __main__.py            CLI entrypoint (python -m src)
 ├── cli.py                 argparse + 9 subcommands
 ├── _ui.py                 rich-based UI with plain-text fallback
 ├── config.py              AppConfig + all sub-configs
