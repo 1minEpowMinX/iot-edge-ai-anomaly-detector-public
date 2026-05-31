@@ -10,7 +10,7 @@ distribution shift, not a bug. For real IoT deployment retrain the model on
 target-device data first; see the diploma's "future work" section.
 
 Usage:
-    python -m src live --duration 60
+    python main.py live --duration 60
 """
 
 from __future__ import annotations

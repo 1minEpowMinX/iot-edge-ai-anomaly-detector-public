@@ -1,6 +1,6 @@
 """Unified command-line interface.
 
-Entry: ``python -m src <command> [options]``
+Entry: ``python main.py <command>`` (from source) or the bundled executable
 
 Production commands:
     demo            Train evolved GRU on holdout + dashboards (showcase)
@@ -123,7 +123,6 @@ def build_parser() -> argparse.ArgumentParser:
         The configured top-level ``ArgumentParser``.
     """
     parser = argparse.ArgumentParser(
-        prog="python -m src",
         description=_dedent("""
             IoT виявлення аномалій — CLI для виробництва та досліджень.
 
@@ -135,10 +134,10 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=_dedent("""
             Приклади:
-              python -m src demo                       # 30с демонстрація
-              python -m src train --epochs 100 --lr 1e-3
-              python -m src live --duration 60         # моніторинг хосту в реальному часі
-              python -m src search --quick             # швидкий еволюційний пошук
+              %(prog)s demo                       # 30с демонстрація
+              %(prog)s train --epochs 100 --lr 1e-3
+              %(prog)s live --duration 60         # моніторинг хосту в реальному часі
+              %(prog)s search --quick             # швидкий еволюційний пошук
 
             Запустіть `<команда> --help` для параметрів конкретної команди.
         """),
@@ -173,9 +172,9 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=_dedent("""
             Приклади:
-              python -m src demo
-              python -m src demo --quick
-              python -m src demo -o ./run1
+              %(prog)s demo
+              %(prog)s demo --quick
+              %(prog)s demo -o ./run1
         """),
     )
     _add_common(p_demo)
@@ -194,11 +193,11 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=_dedent("""
             Приклади:
-              python -m src train
-              python -m src train --epochs 100 --lr 1e-3
-              python -m src train --hidden 32 --layers 2 --window 50 --dropout 0.2
-              python -m src train --device cpu --seed 0
-              python -m src train --train-csv vm_normal.csv   # навчання на реальних даних VM
+              %(prog)s train
+              %(prog)s train --epochs 100 --lr 1e-3
+              %(prog)s train --hidden 32 --layers 2 --window 50 --dropout 0.2
+              %(prog)s train --device cpu --seed 0
+              %(prog)s train --train-csv vm_normal.csv   # навчання на реальних даних VM
         """),
     )
     _add_common(p_train)
@@ -226,15 +225,15 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=_dedent("""
             Приклади:
-              python -m src infer --model artifacts/ --data real.csv
-              python -m src infer --model artifacts/ --data real.csv -o det.csv
+              %(prog)s infer --model artifacts/ --data real.csv
+              %(prog)s infer --model artifacts/ --data real.csv -o det.csv
 
             Очікувані стовпці CSV:
               t, cpu, cpu_iowait, load_avg_1m, ram, swap,
               disk_read_bps, disk_write_bps, net_tx, net_rx,
               net_packets_tx, tcp_conn, proc_count
 
-            Генерувати сумісний CSV: `python -m src collect`.
+            Генерувати сумісний CSV: `%(prog)s collect`.
         """),
     )
     p_infer.add_argument(
@@ -262,9 +261,9 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=_dedent("""
             Приклади:
-              python -m src live --duration 60
-              python -m src live --model ./my_model --interval 0.5
-              python -m src live --no-color    # вимкнути ANSI-кольори
+              %(prog)s live --duration 60
+              %(prog)s live --model ./my_model --interval 0.5
+              %(prog)s live --no-color    # вимкнути ANSI-кольори
 
             Порада: навантажте процесор в іншому терміналі для спрацювання алертів:
               python -c "while True: pass"
@@ -306,8 +305,8 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=_dedent("""
             Приклади:
-              python -m src collect --duration 60
-              python -m src collect --duration 300 --interval 0.5 -o long.csv
+              %(prog)s collect --duration 60
+              %(prog)s collect --duration 300 --interval 0.5 -o long.csv
         """),
     )
     p_col.add_argument(
@@ -341,9 +340,9 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=_dedent("""
             Приклади:
-              python -m src search --quick
-              python -m src search --population 16 --generations 12
-              python -m src search --top-k 5 --mutation-rate 0.25
+              %(prog)s search --quick
+              %(prog)s search --population 16 --generations 12
+              %(prog)s search --top-k 5 --mutation-rate 0.25
         """),
     )
     _add_common(p_search)
@@ -388,7 +387,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="GRU vs LSTM vs MovingAverage",
         description="Порівняти три класи предикторів на ідентичних даних.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Приклад:\n  python -m src compare",
+        epilog="Приклад:\n  %(prog)s compare",
     )
     _add_common(p_cmp)
     p_cmp.set_defaults(output="artifacts/comparison")
@@ -400,7 +399,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Навчити дві моделі — одну на 5 мінімальних метриках "
         "(специфікація диплому), іншу на повних 12 — та порівняти.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Приклад:\n  python -m src ablate",
+        epilog="Приклад:\n  %(prog)s ablate",
     )
     _add_common(p_abl)
     p_abl.set_defaults(output="artifacts/ablation")
@@ -413,8 +412,8 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=_dedent("""
             Приклади:
-              python -m src sweep
-              python -m src sweep --axis window_size
+              %(prog)s sweep
+              %(prog)s sweep --axis window_size
         """),
     )
     _add_common(p_swp)

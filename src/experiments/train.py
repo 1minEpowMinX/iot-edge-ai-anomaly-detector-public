@@ -1,6 +1,6 @@
 """Configurable training runner.
 
-Used by ``python -m src train [--epochs ... --lr ... --hidden ... ...]``.
+Used by ``python main.py train [--epochs ... --lr ... --hidden ... ...]``.
 Defaults to the evolutionary-search winner; CLI flags override individual genes.
 """
 

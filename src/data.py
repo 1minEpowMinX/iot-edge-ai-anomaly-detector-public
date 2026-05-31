@@ -333,7 +333,7 @@ def load_csv_metrics(path: str) -> np.ndarray:
         raise ValueError(
             f"CSV занадто короткий ({len(data)} рядків). "
             f"Мінімум 100, рекомендовано 600+: "
-            f"python -m src collect --duration 600"
+            f"python main.py collect --duration 600"
         )
     return data
 

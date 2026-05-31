@@ -1,7 +1,7 @@
 """Inference: score a CSV with a saved model bundle.
 
 Usage:
-    python -m src infer --model artifacts/ --data real.csv [-o detections.csv]
+    python main.py infer --model artifacts/ --data real.csv [-o detections.csv]
 """
 
 from __future__ import annotations
