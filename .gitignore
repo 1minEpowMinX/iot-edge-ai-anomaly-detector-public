@@ -20,3 +20,6 @@ artifacts/
 build/*
 dist*
 *.spec
+
+# Non-internal project files
+demo/demo.md
