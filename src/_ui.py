@@ -282,6 +282,30 @@ class LiveScroller:
             else:
                 print(line)
 
+    def note(self, lines: list[tuple[str, str | None]]) -> None:
+        """Print a detail block above the live table (scrollback), not in it.
+
+        Useful for one-off annotations (e.g. an anomaly breakdown) that should
+        persist while the streaming table keeps updating below.
+
+        Args:
+            lines: ``(text, style)`` pairs; ``style`` is a rich style hint
+                (e.g. ``"bold red"``, ``"yellow"``, ``"dim"``) or ``None``.
+        """
+        if _HAS_RICH and self._live is not None:
+            for text, style in lines:
+                self._live.console.print(Text(text, style=style or ""))
+        else:
+            for text, style in lines:
+                if style and "red" in style:
+                    print(f"\033[91m{text}\033[0m")
+                elif style and ("yellow" in style or "amber" in style):
+                    print(f"\033[93m{text}\033[0m")
+                elif style and "dim" in style:
+                    print(f"\033[90m{text}\033[0m")
+                else:
+                    print(text)
+
 
 # ---------------------------------------------------------------------------
 # Spinner (for long-running steps without precise progress)

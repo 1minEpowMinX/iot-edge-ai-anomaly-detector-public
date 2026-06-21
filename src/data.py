@@ -28,6 +28,64 @@ FEATURE_NAMES = [
 N_FEATURES = len(FEATURE_NAMES)
 _IDX = {name: i for i, name in enumerate(FEATURE_NAMES)}
 
+# Canonical at-a-glance metric display — the SAME columns, order and headers
+# across every on-screen view (``collect`` console, ``live`` table), regardless
+# of the command. The full 12-channel vector always lands in the CSV and the
+# model input; this is only the subset rendered on screen. One driver per
+# anomaly dimension: cpu/proc (compute), ram (memory), iowait/disk_w (I/O),
+# net_tx/tcp (network). Change this one tuple to restyle every view at once.
+DISPLAY_FEATURES = (
+    "cpu",
+    "ram",
+    "cpu_iowait",
+    "disk_write_bps",
+    "net_tx",
+    "tcp_conn",
+    "proc_count",
+)
+DISPLAY_HEADERS = {
+    "cpu": "cpu%",
+    "ram": "ram%",
+    "cpu_iowait": "iowait%",
+    "disk_write_bps": "disk_w",
+    "net_tx": "net_tx",
+    "tcp_conn": "tcp",
+    "proc_count": "proc",
+}
+
+
+def fmt_metric(name: str, value: float) -> str:
+    """Compact, table-friendly rendering of one metric value.
+
+    Shared by every at-a-glance metric view (``collect`` console, ``live``
+    table) so a given channel looks identical everywhere. Column headers carry
+    the unit, so cells stay unit-light and narrow. Byte-rate channels collapse
+    to K/M suffixes to keep columns from blowing up on spikes.
+
+    Args:
+        name: Channel name (a member of :data:`FEATURE_NAMES`).
+        value: Raw metric value.
+
+    Returns:
+        A short string suitable for a fixed-width table cell.
+    """
+    if name in ("cpu", "cpu_iowait", "ram", "swap"):
+        return f"{value:.1f}"
+    if name == "load_avg_1m":
+        return f"{value:.2f}"
+    if name in ("disk_read_bps", "disk_write_bps", "net_tx", "net_rx"):
+        v = float(value)
+        if v < 10_000:
+            return f"{v:.0f}"
+        if v < 10_000_000:
+            return f"{v / 1024:.0f}K"
+        return f"{v / 1_048_576:.1f}M"
+    if name == "net_packets_tx":
+        return f"{value:.0f}"
+    if name in ("tcp_conn", "proc_count"):
+        return f"{int(value)}"
+    return f"{value:.3f}"
+
 # Subset matching the original thesis spec — used by ablate.py
 SUBSET_5 = ["cpu", "ram", "net_tx", "net_rx", "tcp_conn"]
 

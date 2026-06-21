@@ -24,6 +24,7 @@ import torch
 
 from .. import _ui
 from ..artifacts import load_bundle
+from ..data import DISPLAY_FEATURES, DISPLAY_HEADERS, fmt_metric
 
 
 def _sample_metrics(
@@ -107,6 +108,58 @@ def _fmt_feature(name: str, value: float) -> str:
     if name in ("tcp_conn", "proc_count"):
         return f"{int(value)}"
     return f"{value:.3f}"
+
+
+def _anomaly_breakdown(
+    feature_names: list[str],
+    resid: np.ndarray,
+    score: float,
+    threshold: float,
+    t_s: float,
+) -> list[tuple[str, str | None]]:
+    """Build a per-channel residual breakdown for one anomalous sample.
+
+    The anomaly score is the mean of the per-channel residuals
+    ``|pred - actual|`` (in scaled space). This sorts the 12 channels by
+    residual so the viewer sees *which* channels drove the alert — channels
+    above the mean (the score) are flagged as drivers.
+
+    Args:
+        feature_names: Model feature names, in channel order.
+        resid: Per-channel absolute residuals (scaled), shape ``(n_features,)``.
+        score: The anomaly score (mean of ``resid``).
+        threshold: The decision threshold.
+        t_s: Sample timestamp in seconds.
+
+    Returns:
+        ``(text, style)`` line pairs for :meth:`_ui.LiveScroller.note`.
+    """
+    order = np.argsort(resid)[::-1]
+    max_r = float(resid.max()) or 1.0
+    lines: list[tuple[str, str | None]] = [
+        (
+            f"  ┌ розбивка @ t={t_s:.1f}s  оцінка={score:.4f}  (поріг {threshold:.4f})",
+            "cyan",
+        ),
+        (
+            "  │ внесок каналу |pred − actual| (масштабовано), ◄ — вище середнього:",
+            "cyan",
+        ),
+    ]
+    for idx in order:
+        r = float(resid[idx])
+        bar = "█" * int(round(r / max_r * 22))
+        is_driver = r > score
+        if r > 2 * score:
+            st: str | None = "bold red"
+        elif is_driver:
+            st = "yellow"
+        else:
+            st = "dim"
+        tag = "  ◄ тригер" if is_driver else ""
+        lines.append((f"  │ {feature_names[idx]:<15}{bar:<23}{r:6.3f}{tag}", st))
+    lines.append(("  └" + "─" * 34, "cyan"))
+    return lines
 
 
 def run_live(
@@ -194,19 +247,15 @@ def run_live(
 
     columns = [
         "t,s",
-        "cpu%",
-        "ram%",
-        "iowait%",
-        "net_tx",
-        "tcp",
-        "proc",
-        "score",
+        *(DISPLAY_HEADERS[name] for name in DISPLAY_FEATURES),
+        "оцінка",
         "вердикт",
     ]
     scroller = _ui.LiveScroller(columns=columns, max_rows=20)
 
     n_anomalies = 0
     n_normal = 0
+    prev_anomaly = False
     start = time.time()
     with scroller:
         try:
@@ -229,12 +278,7 @@ def run_live(
                     scroller.add_row(
                         [
                             f"{t_s:5.1f}",
-                            f"{sample['cpu']:.1f}",
-                            f"{sample['ram']:.1f}",
-                            f"{sample['cpu_iowait']:.1f}",
-                            f"{int(sample['net_tx'])}",
-                            f"{int(sample['tcp_conn'])}",
-                            f"{int(sample['proc_count'])}",
+                            *(fmt_metric(name, sample[name]) for name in DISPLAY_FEATURES),
                             "—",
                             f"warmup {len(buffer)}/{bundle.window_size + 1}",
                         ],
@@ -250,7 +294,8 @@ def run_live(
                 x_t = torch.from_numpy(x_scaled).float().unsqueeze(0).to(device)
                 with torch.no_grad():
                     pred = bundle.net(x_t).cpu().numpy()[0]
-                score = float(np.abs(pred - y_scaled).mean())
+                resid = np.abs(pred - y_scaled)
+                score = float(resid.mean())
                 is_anomaly = score > bundle.threshold
                 n_anomalies += int(is_anomaly)
                 n_normal += int(not is_anomaly)
@@ -265,17 +310,27 @@ def run_live(
                 scroller.add_row(
                     [
                         f"{t_s:5.1f}",
-                        f"{sample['cpu']:.1f}",
-                        f"{sample['ram']:.1f}",
-                        f"{sample['cpu_iowait']:.1f}",
-                        f"{int(sample['net_tx'])}",
-                        f"{int(sample['tcp_conn'])}",
-                        f"{int(sample['proc_count'])}",
+                        *(fmt_metric(name, sample[name]) for name in DISPLAY_FEATURES),
                         f"{score:.4f}",
                         verdict,
                     ],
                     style=style,
                 )
+
+                # On the rising edge of an anomaly episode, print a one-off
+                # per-channel breakdown so the viewer sees which channels drove
+                # the alert (once per episode, not every anomalous sample).
+                if is_anomaly and not prev_anomaly:
+                    scroller.note(
+                        _anomaly_breakdown(
+                            bundle.feature_names,
+                            resid,
+                            score,
+                            bundle.threshold,
+                            t_s,
+                        )
+                    )
+                prev_anomaly = is_anomaly
         except KeyboardInterrupt:
             _ui.warn("зупинено користувачем")
 

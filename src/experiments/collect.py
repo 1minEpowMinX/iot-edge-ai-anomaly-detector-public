@@ -7,6 +7,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ..data import DISPLAY_FEATURES, DISPLAY_HEADERS, fmt_metric
+
 # Column order must match ``data.FEATURE_NAMES``.
 FIELDS = [
     "t",
@@ -149,10 +151,19 @@ def run_collect(
             )
             n_samples += 1
             if n_samples % 10 == 0:
-                print(
-                    f"[collect] t={t_s:6.1f}s  cpu={cpu:5.1f}%  ram={ram:5.1f}%  "
-                    f"disk_r={disk_read_bps:8.0f}  net_tx={net_tx:8.0f}  "
-                    f"proc={proc_count}  tcp={tcp_conn}"
+                disp = {
+                    "cpu": cpu,
+                    "ram": ram,
+                    "cpu_iowait": cpu_iowait,
+                    "disk_write_bps": disk_write_bps,
+                    "net_tx": net_tx,
+                    "tcp_conn": tcp_conn,
+                    "proc_count": proc_count,
+                }
+                cells = "  ".join(
+                    f"{DISPLAY_HEADERS[name]}={fmt_metric(name, disp[name])}"
+                    for name in DISPLAY_FEATURES
                 )
+                print(f"[collect] t={t_s:6.1f}s  {cells}")
 
     print(f"[collect] готово, зібрано {n_samples} вимірювань -> {out_path}")
