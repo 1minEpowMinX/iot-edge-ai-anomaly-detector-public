@@ -217,6 +217,7 @@ def run_train(
         test_ctx=test_ctx,
         datamodule=datamodule,
         config={**cfg.to_dict(), "device": device},
+        prefilter=pipeline.prefilter,
     )
 
     _ui.rule("результати на HOLDOUT")

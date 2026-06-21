@@ -191,6 +191,56 @@ def build_prefilter(cfg: DetectorConfig) -> BasePreFilter | None:
     raise ValueError(f"Unknown prefilter_type: {cfg.prefilter_type!r}")
 
 
+def prefilter_state(pf: BasePreFilter) -> dict:
+    """Serialise a *fitted* prefilter to a JSON-able dict for the model bundle.
+
+    Captures the calibrated ``low``/``high`` error thresholds (which come from
+    ``fit()`` on validation data and are not part of the static config) plus the
+    percentiles and EMA alpha needed to reconstruct the same router.
+
+    Args:
+        pf: A fitted prefilter (``low_threshold``/``high_threshold`` populated).
+
+    Returns:
+        A plain dict suitable for ``json.dump``.
+    """
+    state = {
+        "type": "ema" if isinstance(pf, EMAPreFilter) else "ma",
+        "low_percentile": pf.low_percentile,
+        "high_percentile": pf.high_percentile,
+        "low_threshold": pf.low_threshold,
+        "high_threshold": pf.high_threshold,
+    }
+    if isinstance(pf, EMAPreFilter):
+        state["alpha"] = pf.alpha
+    return state
+
+
+def prefilter_from_state(state: dict) -> BasePreFilter:
+    """Rebuild a fitted prefilter from a :func:`prefilter_state` dict.
+
+    Args:
+        state: A dict produced by :func:`prefilter_state`.
+
+    Returns:
+        A ready-to-use prefilter with its error thresholds restored.
+    """
+    if state.get("type") == "ema":
+        pf: BasePreFilter = EMAPreFilter(
+            alpha=float(state.get("alpha", 0.3)),
+            low_percentile=float(state["low_percentile"]),
+            high_percentile=float(state["high_percentile"]),
+        )
+    else:
+        pf = MovingAveragePreFilter(
+            low_percentile=float(state["low_percentile"]),
+            high_percentile=float(state["high_percentile"]),
+        )
+    pf.low_threshold = float(state["low_threshold"])
+    pf.high_threshold = float(state["high_threshold"])
+    return pf
+
+
 def compute_routing_stats(routes: np.ndarray) -> RoutingStats:
     """Tally routing codes into a :class:`RoutingStats` summary.
 

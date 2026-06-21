@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from typing import Any, Iterable
 
 try:
-    from rich.console import Console
+    from rich.console import Console, Group
     from rich.live import Live
     from rich.panel import Panel
     from rich.rule import Rule
@@ -232,15 +232,34 @@ class LiveScroller:
         self._rows: list[list[str]] = []
         self._live: Live | None = None
         self._row_styles: list[str | None] = []
+        self._footer_lines: list[tuple[str, str | None]] | None = None
 
     def _render(self):
-        """Build and return the current rich ``Table`` snapshot."""
+        """Build the current snapshot: the table, plus a live footer if set."""
         t = Table(show_header=True, header_style="bold cyan", expand=False)
         for col in self.columns:
             t.add_column(col, justify="right")
         for row, style in zip(self._rows, self._row_styles):
             t.add_row(*row, style=style)
+        if self._footer_lines:
+            body = [t, *(Text(text, style=style or "") for text, style in self._footer_lines)]
+            return Group(*body)
         return t
+
+    def set_footer(self, lines: list[tuple[str, str | None]] | None) -> None:
+        """Set (or clear) a live panel rendered below the table, in place.
+
+        Unlike :meth:`note` (which scrolls a one-off block into history), the
+        footer is overwritten on every update — use it for a continuously
+        refreshing readout such as a per-channel residual breakdown.
+
+        Args:
+            lines: ``(text, style)`` pairs, or ``None`` to clear the footer.
+                Rich-only; a no-op on the plain-text fallback.
+        """
+        self._footer_lines = lines
+        if _HAS_RICH and self._live is not None:
+            self._live.update(self._render())
 
     def __enter__(self):
         """Enter the context: start the live display or print a plain header."""

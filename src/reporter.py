@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from collections import Counter
-from typing import Iterable
+from typing import Any, Iterable
 
 from .config import PlotStyle
 from .data import DataModule, TestContext
@@ -410,6 +410,7 @@ class Reporter:
         result: RunResult,
         datamodule: DataModule,
         config: dict,
+        prefilter: Any = None,
     ) -> None:
         """Persist the trained model bundle (weights, scaler, metadata).
 
@@ -417,6 +418,9 @@ class Reporter:
             result: The pipeline run result holding the trained predictor.
             datamodule: Data module supplying the fitted scaler.
             config: Serialised application configuration.
+            prefilter: Optional fitted prefilter to persist so inference can
+                replay the same cascade. ``None`` (or an unfitted prefilter)
+                omits it.
 
         Raises:
             TypeError: If the predictor is not a :class:`TorchPredictor`.
@@ -428,12 +432,20 @@ class Reporter:
             )
         save_torch_predictor(self.output_dir, result.predictor)
         save_scaler(self.output_dir, datamodule.scaler)
+
+        pf_state = None
+        if prefilter is not None and getattr(prefilter, "low_threshold", None) is not None:
+            from .prefilter import prefilter_state
+
+            pf_state = prefilter_state(prefilter)
+
         save_meta(
             self.output_dir,
             threshold=result.threshold,
             history=result.history,
             feature_names=self.feature_names,
             config=config,
+            prefilter=pf_state,
         )
 
     # ---------------------------- convenience -------------------------------
@@ -443,6 +455,7 @@ class Reporter:
         test_ctx: TestContext,
         datamodule: DataModule,
         config: dict,
+        prefilter: Any = None,
     ) -> None:
         """Save the full production report: every dashboard plus artefacts.
 
@@ -451,6 +464,7 @@ class Reporter:
             test_ctx: Test context supplying series and labels.
             datamodule: Data module supplying the fitted scaler.
             config: Serialised application configuration.
+            prefilter: Optional fitted prefilter to persist in the bundle.
         """
         self.save_predictions_dashboard(result, test_ctx)
         self.save_detection_dashboard(result, test_ctx)
@@ -459,4 +473,4 @@ class Reporter:
         self.save_roc_pr(result, test_ctx)
         self.save_per_scenario(result)
         self.save_routing(result)
-        self.save_artifacts(result, datamodule, config)
+        self.save_artifacts(result, datamodule, config, prefilter=prefilter)

@@ -16,6 +16,7 @@ import torch
 from .. import _ui
 from ..artifacts import load_bundle
 from ..data import make_windows
+from ..prefilter import NORMAL
 
 
 def _read_csv(path: str, feature_names: list[str]) -> tuple[np.ndarray, list[str]]:
@@ -104,27 +105,48 @@ def run_infer(
 
     _ui.step(1, 1, f"оцінювання {len(X)} вікон")
     bundle.net.eval()
-    with torch.no_grad():
-        x_t = torch.from_numpy(X).float().to(device)
-        y_pred = bundle.net(x_t).cpu().numpy()
-    errors = np.abs(y_pred - y).mean(axis=1)
+
+    errors = np.empty(len(X), dtype=np.float64)
+    fast_mask = np.zeros(len(X), dtype=bool)
+
+    # Asymmetric cascade: confidently-NORMAL windows (cheap EMA error below the
+    # calibrated low threshold) skip the GRU; everything else is scored by it.
+    if bundle.prefilter is not None:
+        routes = bundle.prefilter.classify(X, y)
+        fast_mask = routes == NORMAL
+        if fast_mask.any():
+            ema_pred = bundle.prefilter._predict(X[fast_mask])
+            errors[fast_mask] = np.abs(ema_pred - y[fast_mask]).mean(axis=1)
+
+    gru_mask = ~fast_mask
+    if gru_mask.any():
+        with torch.inference_mode():
+            x_t = torch.from_numpy(X[gru_mask]).float().to(device)
+            y_pred = bundle.net(x_t).cpu().numpy()
+        errors[gru_mask] = np.abs(y_pred - y[gru_mask]).mean(axis=1)
+
     flags = (errors > bundle.threshold).astype(np.int64)
+    # Fast-pathed windows are NORMAL by the cascade's definition.
+    flags[fast_mask] = 0
 
     n_anom = int(flags.sum())
     n_total = len(flags)
+    n_fast = int(fast_mask.sum())
 
     _ui.rule("виявлення")
-    _ui.kv_table(
-        "підсумок",
-        [
-            ("оцінено вікон", n_total),
-            ("аномалій", n_anom),
-            ("частка аномалій", f"{n_anom / max(n_total, 1) * 100:.1f}%"),
-            ("макс. оцінка", f"{float(errors.max()):.4f}"),
-            ("сер. оцінка", f"{float(errors.mean()):.4f}"),
-            ("поріг", f"{bundle.threshold:.4f}"),
-        ],
-    )
+    summary = [
+        ("оцінено вікон", n_total),
+        ("аномалій", n_anom),
+        ("частка аномалій", f"{n_anom / max(n_total, 1) * 100:.1f}%"),
+        ("макс. оцінка", f"{float(errors.max()):.4f}"),
+        ("сер. оцінка", f"{float(errors.mean()):.4f}"),
+        ("поріг", f"{bundle.threshold:.4f}"),
+    ]
+    if bundle.prefilter is not None:
+        summary.append(
+            ("fast-path (без GRU)", f"{n_fast} ({n_fast / max(n_total, 1) * 100:.1f}%)")
+        )
+    _ui.kv_table("підсумок", summary)
     if n_anom > 0:
         idx_anom = np.where(flags == 1)[0]
         shown = ", ".join(str(i) for i in idx_anom[:10])
@@ -136,12 +158,12 @@ def run_infer(
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
-            header = ["window_idx", "anomaly_score", "is_anomaly"]
+            header = ["window_idx", "anomaly_score", "is_anomaly", "fast_path"]
             if times:
                 header.insert(1, "t_end")
             w.writerow(header)
-            for i, (err, flag) in enumerate(zip(errors, flags)):
-                row = [i, float(err), int(flag)]
+            for i, (err, flag, fast) in enumerate(zip(errors, flags, fast_mask)):
+                row = [i, float(err), int(flag), int(fast)]
                 if times:
                     row.insert(1, times[i + bundle.window_size])
                 w.writerow(row)

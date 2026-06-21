@@ -253,6 +253,7 @@ def run_search(
                 else _genome_dict(winner_genome)
             ),
         },
+        prefilter=retrain.prefilter,
     )
     _save_best_genome(
         prod_cfg.artifacts_dir,

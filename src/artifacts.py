@@ -64,6 +64,7 @@ def save_meta(
     history: dict,
     feature_names: list[str],
     config: dict,
+    prefilter: dict | None = None,
 ) -> None:
     """Write the bundle's ``meta.json`` (threshold, features, config, history).
 
@@ -73,6 +74,9 @@ def save_meta(
         history: Training history dict.
         feature_names: Ordered feature names the model expects.
         config: Serialised application configuration.
+        prefilter: Optional serialised fitted prefilter (its calibrated error
+            thresholds). ``None`` omits the cascade so inference runs the GRU on
+            every window — keeps bundles without a prefilter fully valid.
     """
     os.makedirs(save_dir, exist_ok=True)
     payload = {
@@ -80,6 +84,7 @@ def save_meta(
         "feature_names": feature_names,
         "config": config,
         "history": history,
+        "prefilter": prefilter,
     }
     with open(os.path.join(save_dir, "meta.json"), "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False)
@@ -176,6 +181,7 @@ class ModelBundle:
     window_size: int
     n_features: int
     config: dict
+    prefilter: Any = None
 
 
 def load_bundle(save_dir: str, device: str = "cpu") -> ModelBundle:
@@ -187,6 +193,14 @@ def load_bundle(save_dir: str, device: str = "cpu") -> ModelBundle:
     net = load_network(save_dir, n_features=n_features, model_cfg=cfg["model"])
     net.to(device)
     scaler = load_scaler(save_dir)
+
+    prefilter = None
+    pf_state = meta.get("prefilter")
+    if pf_state:
+        from .prefilter import prefilter_from_state  # local to avoid cycle
+
+        prefilter = prefilter_from_state(pf_state)
+
     return ModelBundle(
         net=net,
         scaler=scaler,
@@ -195,4 +209,5 @@ def load_bundle(save_dir: str, device: str = "cpu") -> ModelBundle:
         window_size=int(cfg["data"]["window_size"]),
         n_features=n_features,
         config=cfg,
+        prefilter=prefilter,
     )

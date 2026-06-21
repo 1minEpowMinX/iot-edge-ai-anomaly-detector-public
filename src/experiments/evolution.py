@@ -590,6 +590,7 @@ class RetrainArtifacts:
     result: RunResult
     datamodule: DataModule
     test_ctx: TestContext
+    prefilter: object = None
 
 
 def retrain_genome_full(
@@ -640,4 +641,9 @@ def retrain_genome_full(
         prefilter=prefilter,
     )
     result = pipeline.run(test_ctx, calibration_ctx=calib_ctx)
-    return RetrainArtifacts(result=result, datamodule=datamodule, test_ctx=test_ctx)
+    return RetrainArtifacts(
+        result=result,
+        datamodule=datamodule,
+        test_ctx=test_ctx,
+        prefilter=pipeline.prefilter,
+    )

@@ -154,6 +154,7 @@ def run_demo(quick: bool = False, output_dir: str = "artifacts") -> None:
         test_ctx=test_ctx,
         datamodule=datamodule,
         config={**cfg.to_dict(), "device": device},
+        prefilter=pipeline.prefilter,
     )
 
     # Фінальна таблиця метрик

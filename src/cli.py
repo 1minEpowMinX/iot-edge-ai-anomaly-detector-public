@@ -155,6 +155,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--quiet", "-q", action="store_true", help="вимкнути несуттєвий вивід"
     )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=None,
+        metavar="N",
+        help="обмежити число потоків CPU torch. Для edge/IoT `--threads 1` "
+        "пришвидшує per-window інференс малих моделей (overhead потоків > "
+        "обчислень). За замовчуванням — дефолт torch.",
+    )
 
     subs = parser.add_subparsers(
         dest="command",
@@ -449,6 +458,14 @@ def main(argv: list[str] | None = None) -> int:
     elif args.verbose:
         _ui.set_verbosity(1 + args.verbose)
     _ui.install_traceback()
+
+    # Edge/IoT optimization: cap torch CPU threads when requested. Tiny-model
+    # single-window inference is dominated by thread overhead, so `--threads 1`
+    # cuts latency on low-core devices; left untouched it uses torch's default.
+    if args.threads is not None:
+        import torch
+
+        torch.set_num_threads(max(1, args.threads))
 
     try:
         return _dispatch(args)

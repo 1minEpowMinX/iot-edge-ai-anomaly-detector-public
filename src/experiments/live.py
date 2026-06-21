@@ -25,6 +25,7 @@ import torch
 from .. import _ui
 from ..artifacts import load_bundle
 from ..data import DISPLAY_FEATURES, DISPLAY_HEADERS, fmt_metric
+from ..prefilter import NORMAL
 
 
 def _sample_metrics(
@@ -110,19 +111,22 @@ def _fmt_feature(name: str, value: float) -> str:
     return f"{value:.3f}"
 
 
-def _anomaly_breakdown(
+def _residual_panel(
     feature_names: list[str],
     resid: np.ndarray,
     score: float,
     threshold: float,
     t_s: float,
 ) -> list[tuple[str, str | None]]:
-    """Build a per-channel residual breakdown for one anomalous sample.
+    """Build a live per-channel residual panel for one scored window.
 
     The anomaly score is the mean of the per-channel residuals
-    ``|pred - actual|`` (in scaled space). This sorts the 12 channels by
-    residual so the viewer sees *which* channels drove the alert — channels
-    above the mean (the score) are flagged as drivers.
+    ``|pred - actual|`` (in scaled space). Channels are kept in a **fixed**
+    order (so a given channel stays on its row as the panel refreshes), with
+    the bar length normalised to the current max. Channels above the mean (the
+    score) are flagged ``◄ тригер`` — these are what push the score over the
+    threshold. Updated every sample via :meth:`_ui.LiveScroller.set_footer`,
+    it doubles as a real-time diagnostic of which channels run hot.
 
     Args:
         feature_names: Model feature names, in channel order.
@@ -132,33 +136,35 @@ def _anomaly_breakdown(
         t_s: Sample timestamp in seconds.
 
     Returns:
-        ``(text, style)`` line pairs for :meth:`_ui.LiveScroller.note`.
+        ``(text, style)`` line pairs for :meth:`_ui.LiveScroller.set_footer`.
     """
-    order = np.argsort(resid)[::-1]
     max_r = float(resid.max()) or 1.0
+    over = score > threshold
+    head_style = "bold red" if over else "cyan"
     lines: list[tuple[str, str | None]] = [
         (
-            f"  ┌ розбивка @ t={t_s:.1f}s  оцінка={score:.4f}  (поріг {threshold:.4f})",
-            "cyan",
+            f"  ┌ діагностика каналів @ t={t_s:.1f}s  оцінка={score:.4f}  "
+            f"(поріг {threshold:.4f})",
+            head_style,
         ),
         (
-            "  │ внесок каналу |pred − actual| (масштабовано), ◄ — вище середнього:",
+            "  │ |pred − actual| (масштабовано), ◄ — вище середнього (тригер):",
             "cyan",
         ),
     ]
-    for idx in order:
+    for idx, name in enumerate(feature_names):
         r = float(resid[idx])
         bar = "█" * int(round(r / max_r * 22))
-        is_driver = r > score
+        is_trigger = r > score
         if r > 2 * score:
             st: str | None = "bold red"
-        elif is_driver:
+        elif is_trigger:
             st = "yellow"
         else:
             st = "dim"
-        tag = "  ◄ тригер" if is_driver else ""
-        lines.append((f"  │ {feature_names[idx]:<15}{bar:<23}{r:6.3f}{tag}", st))
-    lines.append(("  └" + "─" * 34, "cyan"))
+        tag = "  ◄ тригер" if is_trigger else ""
+        lines.append((f"  │ {name:<15}{bar:<23}{r:7.3f}{tag}", st))
+    lines.append(("  └" + "─" * 38, "cyan"))
     return lines
 
 
@@ -195,12 +201,21 @@ def run_live(
     warmup_seconds = warmup_samples * interval
     expected_scores = max(0, int((duration - warmup_seconds) / interval))
 
+    if bundle.prefilter is not None:
+        prefilter_desc = (
+            f"{bundle.prefilter.name} (fast-NORMAL нижче "
+            f"{bundle.prefilter.low_threshold:.4f})"
+        )
+    else:
+        prefilter_desc = "немає (GRU на кожному вікні)"
+
     _ui.kv_table(
         "модель",
         [
             ("window_size", bundle.window_size),
             ("n_features", bundle.n_features),
             ("поріг", f"{bundle.threshold:.5f}"),
+            ("префільтр", prefilter_desc),
             ("device", device),
             ("семплів прогріву", f"{warmup_samples} (~{warmup_seconds:.0f}s)"),
             ("очікувано оцінок", expected_scores),
@@ -251,11 +266,13 @@ def run_live(
         "оцінка",
         "вердикт",
     ]
-    scroller = _ui.LiveScroller(columns=columns, max_rows=20)
+    # Fewer rows: the live residual panel renders below the table, so leave it
+    # vertical room.
+    scroller = _ui.LiveScroller(columns=columns, max_rows=12)
 
     n_anomalies = 0
     n_normal = 0
-    prev_anomaly = False
+    n_fast = 0
     start = time.time()
     with scroller:
         try:
@@ -291,8 +308,41 @@ def run_live(
                 y_raw = window[-1]
                 x_scaled = bundle.scaler.transform(x_raw)
                 y_scaled = bundle.scaler.transform(y_raw.reshape(1, -1))[0]
+
+                # Asymmetric cascade: a confidently-NORMAL window (cheap EMA
+                # error below the calibrated low threshold) skips the GRU
+                # entirely. Anything else — UNCERTAIN or the untrusted
+                # prefilter-ANOMALY — always reaches the GRU, so every real
+                # alert keeps its per-channel breakdown.
+                if (
+                    bundle.prefilter is not None
+                    and bundle.prefilter.classify(x_scaled[None], y_scaled[None])[0]
+                    == NORMAL
+                ):
+                    n_normal += 1
+                    n_fast += 1
+                    scroller.add_row(
+                        [
+                            f"{t_s:5.1f}",
+                            *(fmt_metric(name, sample[name]) for name in DISPLAY_FEATURES),
+                            "—",
+                            "OK·fast",
+                        ],
+                        style="dim",
+                    )
+                    scroller.set_footer(
+                        [
+                            (
+                                f"  ┌ діагностика каналів @ t={t_s:.1f}s  "
+                                "вікно пройшло fast-path (GRU пропущено)",
+                                "dim",
+                            )
+                        ]
+                    )
+                    continue
+
                 x_t = torch.from_numpy(x_scaled).float().unsqueeze(0).to(device)
-                with torch.no_grad():
+                with torch.inference_mode():
                     pred = bundle.net(x_t).cpu().numpy()[0]
                 resid = np.abs(pred - y_scaled)
                 score = float(resid.mean())
@@ -317,30 +367,33 @@ def run_live(
                     style=style,
                 )
 
-                # On the rising edge of an anomaly episode, print a one-off
-                # per-channel breakdown so the viewer sees which channels drove
-                # the alert (once per episode, not every anomalous sample).
-                if is_anomaly and not prev_anomaly:
-                    scroller.note(
-                        _anomaly_breakdown(
-                            bundle.feature_names,
-                            resid,
-                            score,
-                            bundle.threshold,
-                            t_s,
-                        )
+                # Refresh the live per-channel residual panel every scored
+                # sample — a real-time readout of which channels run hot
+                # (drives diagnosis: out-of-range channels show up immediately).
+                scroller.set_footer(
+                    _residual_panel(
+                        bundle.feature_names,
+                        resid,
+                        score,
+                        bundle.threshold,
+                        t_s,
                     )
-                prev_anomaly = is_anomaly
+                )
         except KeyboardInterrupt:
             _ui.warn("зупинено користувачем")
 
     total = n_anomalies + n_normal
+    summary = [
+        ("оцінено семплів", total),
+        ("аномалій", n_anomalies),
+        ("частка аномалій", f"{n_anomalies / max(total, 1) * 100:.1f}%"),
+    ]
+    if bundle.prefilter is not None:
+        summary.append(
+            (
+                "fast-path (без GRU)",
+                f"{n_fast} ({n_fast / max(total, 1) * 100:.1f}%)",
+            )
+        )
     _ui.rule()
-    _ui.kv_table(
-        "підсумок",
-        [
-            ("оцінено семплів", total),
-            ("аномалій", n_anomalies),
-            ("частка аномалій", f"{n_anomalies / max(total, 1) * 100:.1f}%"),
-        ],
-    )
+    _ui.kv_table("підсумок", summary)
