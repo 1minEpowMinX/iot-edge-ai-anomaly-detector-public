@@ -22,7 +22,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+# build.py lives in utils/, so the repo root is one level up.
+ROOT = Path(__file__).resolve().parent.parent
 
 # Shared across every platform. Kept in one place so the three targets cannot
 # drift apart (the old build.ps1 / build.sh / .spec each held their own copy).
